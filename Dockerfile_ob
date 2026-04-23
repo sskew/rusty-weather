@@ -1,0 +1,54 @@
+# syntax=docker/dockerfile:1
+
+# ETAP 1
+# Wykorzystuję obraz Rust z Alpine oraz dwa etapy budowania, aby zmniejszyć rozmiar obrazu
+# Pobieram obraz z najnowszą wersją Rust
+FROM rust:alpine AS builder
+
+# Instalacja narzędzi do kompilacji statycznej Rust
+# Biblioteka musl-dev jest najmniejszą biblioteką C, która pozwala na kompilację statyczną i zmniejszenie rozmiaru pliku binarnego
+RUN apk add --no-cache musl-dev
+
+# Ustalenie katalogu roboczego i kopiowanie kodu źródłowego
+WORKDIR /app
+COPY . .
+
+# Kompilacja programu z flagą --release, która włącza optymalizacje i jeszcze zmniejsza rozmiar pliku binarnego
+# Dodatkowo target kompilacji każe kompilować program pod odpowiednią architekturę linkuksową i nakazuje wykorzystać bibliotkę musl
+RUN cargo build --release --target x86_64-unknown-linux-musl
+
+# ETAP 2
+# Aplikacja jest w stanie działać na obrazie scratch, ale obraz ten posiada zbyt małą funkcjonalność aby uruchomić healthcheck w tej postaci lub utworzyć użytkownika
+FROM alpine:latest
+
+# Metadane zgodne z OCI
+LABEL org.opencontainers.image.title="rusty-weather"
+LABEL org.opencontainers.image.authors="Wojciech Cioczek"
+LABEL org.opencontainers.image.description="Prosta aplikacja pogodowa stworzona w Rust"
+
+# Kod skopiowany z generycznego pliku Dockerfile, dzięki niemu kontener nie używa konta root i podniesione jest bezpieczeństwo kontenera
+# Create a non-privileged user that the app will run under.
+# See https://docs.docker.com/go/dockerfile-user-best-practices/
+ARG UID=10001
+RUN adduser \
+    --disabled-password \
+    --gecos "" \
+    --home "/nonexistent" \
+    --shell "/sbin/nologin" \
+    --no-create-home \
+    --uid "${UID}" \
+    appuser
+USER appuser
+
+# Kopiowanie już skompilowanego w poprzednim etapie pliku binarnego
+COPY --from=builder /app/target/x86_64-unknown-linux-musl/release/rusty-weather /app
+
+# Healthcheck sprawdzający, czy aplikacja nasłuchuje na porcie 8080
+HEALTHCHECK --interval=30s --timeout=3s \
+  CMD wget --quiet --tries=1 --spider http://127.0.0.1:8080/ || exit 1
+
+# Nasłuchiwanie na porcie 8080
+EXPOSE 8080
+
+# Uruchomienie aplikacji
+ENTRYPOINT ["/app"]

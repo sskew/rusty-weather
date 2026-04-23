@@ -23,15 +23,28 @@ FROM rust:alpine AS builder
 
 # Instalacja narzędzi do kompilacji statycznej Rust
 # Biblioteka musl-dev jest najmniejszą biblioteką C, która pozwala na kompilację statyczną i zmniejszenie rozmiaru pliku binarnego
-RUN apk add --no-cache musl-dev
+RUN apk add --no-cache musl-dev git openssh-client
+
+# Argumenty dostarczane automatycznie przez buildx
+ARG TARGETARCH
+
+# Dodanie klucza publicznego Github do zaufanych hostów, aby umożliwić klonowanie repozytorium przez SSH
+RUN mkdir -p -m 0700 ~/.ssh && ssh-keyscan github.com >> ~/.ssh/known_hosts
 
 # Ustalenie katalogu roboczego i kopiowanie kodu źródłowego
 WORKDIR /app
-COPY . .
+RUN --mount=type=ssh,id=sskew git clone git@github.com:sskew/rusty-weather-code.git .
 
 # Kompilacja programu z flagą --release, która włącza optymalizacje i jeszcze zmniejsza rozmiar pliku binarnego
-# Dodatkowo target kompilacji każe kompilować program pod odpowiednią architekturę linkuksową i nakazuje wykorzystać bibliotkę musl
-RUN cargo build --release --target x86_64-unknown-linux-musl
+# Dynamiczna kompilacja zależna od architektury
+RUN if [ "$TARGETARCH" = "amd64" ]; then \
+        export TARGET=x86_64-unknown-linux-musl; \
+    elif [ "$TARGETARCH" = "arm64" ]; then \
+        export TARGET=aarch64-unknown-linux-musl; \
+    fi && \
+    rustup target add $TARGET && \
+    cargo build --release --target $TARGET && \
+    cp target/$TARGET/release/rusty-weather /app/rusty-weather-bin
 
 # ETAP 2
 # Aplikacja jest w stanie działać na obrazie scratch, ale obraz ten posiada zbyt małą funkcjonalność aby uruchomić healthcheck w tej postaci lub utworzyć użytkownika
@@ -57,7 +70,7 @@ RUN adduser \
 USER appuser
 
 # Kopiowanie już skompilowanego w poprzednim etapie pliku binarnego
-COPY --from=builder /app/target/x86_64-unknown-linux-musl/release/rusty-weather /app
+COPY --from=builder /app/rusty-weather-bin /app
 
 # Healthcheck sprawdzający, czy aplikacja nasłuchuje na porcie 8080
 HEALTHCHECK --interval=30s --timeout=3s \

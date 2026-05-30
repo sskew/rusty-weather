@@ -63,7 +63,9 @@ jobs:
           load: true
           tags: localbuild/testimage:latest
           cache-from: type=registry,ref=${{ env.CACHE_IMAGE }}:buildcache
-          
+          ssh: |
+            sskew=${{ secrets.SSH_PRIVATE_KEY }}
+            
       # Test CVE (Trivy)
       - name: Run Trivy vulnerability scanner
         uses: aquasecurity/trivy-action@master

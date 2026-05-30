@@ -21,7 +21,7 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      # Uruchomienie agenta SSH w chmurze i załadowanie klucza z sekretów
+      # Krok uruchamia agenta
       - name: Start SSH Agent and load private key
         uses: webfactory/ssh-agent@v0.9.0
         with:
@@ -42,14 +42,14 @@ jobs:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
 
-      # Konfiguracja środowiska
+      # Konfiguracja środowiska pod multi-architecture
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v3
       
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
-      # Tagowanie
+      # Ekstrakcja metadanych (Tagowanie)
       - name: Extract metadata (tags, labels) for Docker
         id: meta
         uses: docker/metadata-action@v5
@@ -60,7 +60,7 @@ jobs:
             type=ref,event=branch
             type=semver,pattern={{version}}
 
-      # Budowa lokalnego archiwum do skanowania
+      # Budowa lokalnego archiwum do skanowania (Bez parametru ssh:)
       - name: Build image for scanning
         uses: docker/build-push-action@v5
         with:
@@ -69,10 +69,8 @@ jobs:
           load: true
           tags: localbuild/testimage:latest
           cache-from: type=registry,ref=${{ env.CACHE_IMAGE }}:buildcache
-          ssh: |
-            sskew=default
 
-      # Test CVE z użyciem Trivy
+      # Test CVE (Trivy)
       - name: Run Trivy vulnerability scanner
         uses: aquasecurity/trivy-action@master
         with:
@@ -83,7 +81,7 @@ jobs:
           vuln-type: 'os,library'
           severity: 'CRITICAL,HIGH'
 
-      # Budowa i push obrazu docelowego
+      # Budowa i push obrazu docelowego (Bez parametru ssh:)
       - name: Build and push final image
         uses: docker/build-push-action@v5
         with:
@@ -95,5 +93,3 @@ jobs:
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=registry,ref=${{ env.CACHE_IMAGE }}:buildcache
           cache-to: type=registry,ref=${{ env.CACHE_IMAGE }}:buildcache,mode=max
-          ssh: |
-            sskew=default

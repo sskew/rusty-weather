@@ -88,3 +88,6 @@ jobs:
           # Konfiguracja cache (Max) 
           cache-from: type=registry,ref=${{ env.CACHE_IMAGE }}:buildcache
           cache-to: type=registry,ref=${{ env.CACHE_IMAGE }}:buildcache,mode=max
+          # Klucz prywatny używany jest do pobrania repozytorium git z kodem źródłowym
+          ssh: |
+            sskew=${{ secrets.SSH_PRIVATE_KEY }}

@@ -2,14 +2,18 @@ name: Docker Build, Scan and Publish
 
 on:
   push:
-    branches: [ "main" ]
+    branches: ["main"]
+    # Nasłuchiwanie na tagi, aby wykorzystać wersjonowanie semantyczne
+    tags: ["v*.*.*"]
   workflow_dispatch:
 
+# Zmienne
 env:
   REGISTRY: ghcr.io
   IMAGE_NAME: ${{ github.repository_owner }}/rusty-weather
   CACHE_IMAGE: docker.io/${{ secrets.DOCKERHUB_USERNAME }}/rusty-weather-cache
 
+# Zadania
 jobs:
   build-scan-and-push:
     runs-on: ubuntu-latest
@@ -42,10 +46,10 @@ jobs:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
 
-      # Konfiguracja środowiska
+      # Konfiguracja środowiska QUEMU i Buildx
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v3
-      
+
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
@@ -60,7 +64,7 @@ jobs:
             type=ref,event=branch
             type=semver,pattern={{version}}
 
-      # Budowa lokalnego archiwum do skanowania
+      # Budowa lokalnego obrazu w jednej architekturze przeznaczonego do skanowania
       - name: Build image for scanning
         uses: docker/build-push-action@v5
         with:
@@ -72,18 +76,18 @@ jobs:
           ssh: |
             sskew=${{ env.SSH_AUTH_SOCK }}
 
-      # Test CVE z użyciem Trivy
+      # Test CVE z użyciem Trivy, przerywane w przypadku znalezienia krytycznych lub wysokich podatności 
       - name: Run Trivy vulnerability scanner
         uses: aquasecurity/trivy-action@master
         with:
-          image-ref: 'localbuild/testimage:latest'
-          format: 'table'
-          exit-code: '1'
+          image-ref: "localbuild/testimage:latest"
+          format: "table"
+          exit-code: "1"
           ignore-unfixed: true
-          vuln-type: 'os,library'
-          severity: 'CRITICAL,HIGH'
+          vuln-type: "os,library"
+          severity: "CRITICAL,HIGH"
 
-      # Budowa i push obrazu docelowego
+      # Budowa multi-arch, push do GHXT, cache'owanie w trybie max
       - name: Build and push final image
         uses: docker/build-push-action@v5
         with:
@@ -93,6 +97,7 @@ jobs:
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
+          # Oddzielne repozytorium cache'owane w DockerHub
           cache-from: type=registry,ref=${{ env.CACHE_IMAGE }}:buildcache
           cache-to: type=registry,ref=${{ env.CACHE_IMAGE }}:buildcache,mode=max
           ssh: |

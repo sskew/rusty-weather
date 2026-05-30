@@ -70,7 +70,7 @@ jobs:
           tags: localbuild/testimage:latest
           cache-from: type=registry,ref=${{ env.CACHE_IMAGE }}:buildcache
           ssh: |
-            sskew=default
+            sskew=${{ env.SSH_AUTH_SOCK }}
 
       # Test CVE z użyciem Trivy
       - name: Run Trivy vulnerability scanner
@@ -96,4 +96,4 @@ jobs:
           cache-from: type=registry,ref=${{ env.CACHE_IMAGE }}:buildcache
           cache-to: type=registry,ref=${{ env.CACHE_IMAGE }}:buildcache,mode=max
           ssh: |
-            sskew=default
+            sskew=${{ env.SSH_AUTH_SOCK }}

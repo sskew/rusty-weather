@@ -21,13 +21,19 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
+      # Uruchomienie agenta SSH w chmurze i załadowanie klucza z sekretów
+      - name: Start SSH Agent and load private key
+        uses: webfactory/ssh-agent@v0.9.0
+        with:
+          ssh-private-key: ${{ secrets.SSH_PRIVATE_KEY }}
+
       # Logowanie do GHCR
       - name: Log in to the Container registry
         uses: docker/login-action@v3
         with:
           registry: ${{ env.REGISTRY }}
           username: ${{ github.actor }}
-          password: ${{ secrets.GH_PAT }}
+          password: ${{ secrets.GITHUB_TOKEN }}
 
       # Logowanie do DockerHub
       - name: Log in to Docker Hub
@@ -36,14 +42,14 @@ jobs:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
 
-      # Konfiguracja środowiska mulit-arch
+      # Konfiguracja środowiska
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v3
       
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
-      # Ekstrakcja metadanych
+      # Tagowanie
       - name: Extract metadata (tags, labels) for Docker
         id: meta
         uses: docker/metadata-action@v5
@@ -54,7 +60,7 @@ jobs:
             type=ref,event=branch
             type=semver,pattern={{version}}
 
-      # Budowa lokalnego archiwum TAR
+      # Budowa lokalnego archiwum do skanowania
       - name: Build image for scanning
         uses: docker/build-push-action@v5
         with:
@@ -64,20 +70,20 @@ jobs:
           tags: localbuild/testimage:latest
           cache-from: type=registry,ref=${{ env.CACHE_IMAGE }}:buildcache
           ssh: |
-            sskew=${{ secrets.SSH_PRIVATE_KEY }}
-            
-      # Test CVE (Trivy)
+            sskew=default
+
+      # Test CVE z użyciem Trivy
       - name: Run Trivy vulnerability scanner
         uses: aquasecurity/trivy-action@master
         with:
           image-ref: 'localbuild/testimage:latest'
           format: 'table'
-          exit-code: '1' # Zatrzymuje workflow jeśli znajdzie podatności
+          exit-code: '1'
           ignore-unfixed: true
           vuln-type: 'os,library'
           severity: 'CRITICAL,HIGH'
 
-      # Jeśli Trivy przejdzie pomyślnie, wysyłany jest finalny obraz do rejestru
+      # Budowa i push obrazu docelowego
       - name: Build and push final image
         uses: docker/build-push-action@v5
         with:
@@ -87,9 +93,7 @@ jobs:
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
-          # Konfiguracja cache (Max) 
           cache-from: type=registry,ref=${{ env.CACHE_IMAGE }}:buildcache
           cache-to: type=registry,ref=${{ env.CACHE_IMAGE }}:buildcache,mode=max
-          # Klucz prywatny używany jest do pobrania repozytorium git z kodem źródłowym
           ssh: |
-            sskew=${{ secrets.SSH_PRIVATE_KEY }}
+            sskew=default
